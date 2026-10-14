@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stochastic VC Method</title>
+<meta name="description" content="Price an early-stage venture deal with a Monte Carlo version of the VC Method.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+  /* ------------------------------------------------------------------
+     Configuration: set REPO_URL (in the script at the bottom) to your
+     GitHub repository to show the "Code on GitHub" link.
+     ------------------------------------------------------------------ */
+  :root {
+    --ink: #111111;
+    --ink-soft: #4a4a4a;
+    --muted: #7a7a7a;
+    --rule: #e4e4e4;
+    --paper: #ffffff;
+    --tint: #f6f5f2;
+    --accent: #7a1f2b;      /* burgundy, used sparingly */
+    --serif-display: "Playfair Display", Georgia, "Times New Roman", serif;
+    --serif-text: "Source Serif 4", Georgia, "Times New Roman", serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink); }
+  body { font-family: var(--serif-text); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  a { color: var(--ink); text-decoration-color: var(--rule); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--ink); }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  header.top { padding: 56px 0 28px; border-bottom: 1px solid var(--ink); }
+  .eyebrow { font-family: var(--serif-display); font-style: italic; color: var(--muted); font-size: 15px; margin: 0 0 6px; }
+  h1 { font-family: var(--serif-display); font-weight: 700; font-size: clamp(34px, 6vw, 54px); line-height: 1.05; margin: 0 0 14px; letter-spacing: -0.01em; }
+  .lede { max-width: 680px; color: var(--ink-soft); font-size: 18px; margin: 0; }
+  .links { margin-top: 18px; display: flex; gap: 22px; flex-wrap: wrap; font-size: 15px; }
+  .links a { font-family: var(--serif-display); font-style: italic; }
+
+  main { display: grid; grid-template-columns: 330px 1fr; gap: 48px; padding: 36px 0 64px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; gap: 28px; } .wrap { padding: 0 16px; } }
+
+  /* Inputs */
+  aside { align-self: start; position: sticky; top: 16px; }
+  @media (max-width: 860px) { aside { position: static; } }
+  h2 { font-family: var(--serif-display); font-weight: 600; font-size: 22px; margin: 0 0 4px; }
+  h3 { font-family: var(--serif-display); font-weight: 600; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); margin: 26px 0 8px; }
+  .preset { width: 100%; font: inherit; font-size: 15px; padding: 9px 10px; border: 1px solid var(--ink); background: var(--paper); color: var(--ink); border-radius: 0; }
+  .preset-note { font-size: 13px; color: var(--muted); margin: 6px 0 0; min-height: 1.2em; }
+  .field { display: grid; grid-template-columns: 1fr 96px; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--rule); }
+  .field.pair { grid-template-columns: 1fr 64px 12px 64px; }
+  .field label { font-size: 14.5px; }
+  .field small { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
+  .field input { width: 100%; font: inherit; font-size: 15px; text-align: right; border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--ink); padding: 2px 0; font-variant-numeric: tabular-nums; }
+  .field input:focus { outline: none; border-bottom-color: var(--ink); }
+  .field .dash { text-align: center; color: var(--muted); }
+  .runs { display: flex; gap: 8px; align-items: center; margin-top: 18px; font-size: 13px; color: var(--muted); }
+
+  /* Results */
+  .verdict { font-family: var(--serif-display); font-size: clamp(22px, 3vw, 28px); line-height: 1.3; margin: 0 0 6px; }
+  .verdict em { font-style: italic; color: var(--accent); }
+  .verdict-sub { color: var(--ink-soft); margin: 0 0 26px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--ink); border-left: 1px solid var(--rule); }
+  @media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile { padding: 14px 16px 16px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .tile .k { font-size: 13px; color: var(--muted); }
+  .tile .v { font-family: var(--serif-display); font-size: 30px; font-weight: 600; line-height: 1.15; font-variant-numeric: lining-nums tabular-nums; }
+  .tile .s { font-size: 12.5px; color: var(--muted); }
+  .tile.key .v { color: var(--accent); }
+
+  figure { margin: 34px 0 0; }
+  figure h2 { margin-bottom: 2px; }
+  figcaption { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
+  svg text { font-family: var(--serif-text); fill: var(--ink-soft); font-size: 11px; }
+  svg .lbl { fill: var(--ink); font-size: 12px; }
+  .legend { display: flex; gap: 18px; font-size: 13px; color: var(--ink-soft); margin-top: 4px; flex-wrap: wrap; }
+  .sw { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; margin-right: 6px; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--rule); font-size: 15px; }
+  th { font-family: var(--serif-display); font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--ink); }
+  td.num, th.num { text-align: right; }
+  tr.here td { background: var(--tint); }
+
+  .busy { opacity: 0.45; transition: opacity 0.15s; }
+  footer { border-top: 1px solid var(--ink); padding: 22px 0 48px; color: var(--muted); font-size: 13.5px; }
+  footer p { max-width: 760px; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">A venture pricing model</p>
+    <h1>The Stochastic VC Method</h1>
+    <p class="lede">Enter a deal and your assumptions. The model plays out 100,000 possible futures
+      for the company, then tells you the most you could pay and still earn a fair return.</p>
+    <nav class="links">
+      <a href="methodology.html">Read the methodology →</a>
+      <a id="repo-link" href="#" hidden>Code on GitHub →</a>
+    </nav>
+  </header>
+
+  <main>
+    <aside>
+      <h2>Inputs</h2>
+      <select class="preset" id="preset" aria-label="Load a preset">
+        <option value="base">Illustrative seed deal</option>
+        <option value="figma">Figma, Series A (Dec 2015)</option>
+        <option value="navan">Navan, Series A (Feb 2016)</option>
+        <option value="artly">Artly, crowdfunding (2026)</option>
+      </select>
+      <p class="preset-note" id="preset-note"></p>
+
+      <h3>The deal</h3>
+      <div class="field"><label for="investment">Cheque <small>$M invested now</small></label><input id="investment" type="number" step="0.1" min="0.01"></div>
+      <div class="field"><label for="post">Post-money valuation <small>$M, the price being tested</small></label><input id="post" type="number" step="1" min="0.1"></div>
+
+      <h3>Survival</h3>
+      <div class="field"><label for="pFail">Chance of failure <small>% that die before a real exit</small></label><input id="pFail" type="number" step="1" min="0" max="99"></div>
+      <div class="field"><label for="recovery">Recovery if it fails <small>% of the cheque returned</small></label><input id="recovery" type="number" step="1" min="0" max="90"></div>
+
+      <h3>The exit</h3>
+      <div class="field pair"><label>Exit-year revenue <small>$M, bad case – good case (P10–P90)</small></label><input id="revP10" type="number" step="1" min="0.1" aria-label="Revenue P10"><span class="dash">–</span><input id="revP90" type="number" step="1" min="0.2" aria-label="Revenue P90"></div>
+      <div class="field pair"><label>Exit multiple <small>EV / revenue, P10–P90</small></label><input id="multP10" type="number" step="0.5" min="0.1" aria-label="Multiple P10"><span class="dash">–</span><input id="multP90" type="number" step="0.5" min="0.2" aria-label="Multiple P90"></div>
+      <div class="field"><label for="rho">Revenue ↔ multiple link <small>correlation, −0.9 to 0.9</small></label><input id="rho" type="number" step="0.1" min="-0.9" max="0.9"></div>
+
+      <h3>Timing and dilution</h3>
+      <div class="field pair"><label>Years to exit <small>range, most likely in the middle</small></label><input id="yearsMin" type="number" step="1" min="1"><span class="dash">–</span><input id="yearsMax" type="number" step="1" min="1"></div>
+      <div class="field pair"><label>Future funding rounds <small>range</small></label><input id="roundsMin" type="number" step="1" min="0"><span class="dash">–</span><input id="roundsMax" type="number" step="1" min="0"></div>
+      <div class="field"><label for="dilution">Dilution per round <small>% of the company sold, average</small></label><input id="dilution" type="number" step="1" min="0" max="60"></div>
+
+      <h3>Your hurdle</h3>
+      <div class="field"><label for="fair">Fair annual return <small>% for time and market risk only</small></label><input id="fair" type="number" step="1" min="1" max="60"></div>
+
+      <div class="runs" id="runs">100,000 simulated futures</div>
+    </aside>
+
+    <section id="results" aria-live="polite">
+      <p class="verdict" id="verdict">&nbsp;</p>
+      <p class="verdict-sub" id="verdict-sub">&nbsp;</p>
+
+      <div class="tiles">
+        <div class="tile key"><div class="k">Maximum price</div><div class="v" id="t-max">–</div><div class="s">post-money where NPV = 0</div></div>
+        <div class="tile"><div class="k">Price tested</div><div class="v" id="t-post">–</div><div class="s" id="t-gap">&nbsp;</div></div>
+        <div class="tile"><div class="k">Average multiple</div><div class="v" id="t-mean">–</div><div class="s">mean MOIC across all futures</div></div>
+        <div class="tile"><div class="k">Typical multiple</div><div class="v" id="t-median">–</div><div class="s">median MOIC</div></div>
+        <div class="tile"><div class="k">Chance of losing money</div><div class="v" id="t-loss">–</div><div class="s">MOIC below 1×</div></div>
+        <div class="tile"><div class="k">Chance of 10× or more</div><div class="v" id="t-10x">–</div><div class="s">a fund-returning outcome</div></div>
+      </div>
+
+      <figure>
+        <h2>The range of outcomes</h2>
+        <figcaption>Every simulated future at the price tested. Most deals lose money; a few return many times the cheque.</figcaption>
+        <svg id="hist" viewBox="0 0 760 300" width="100%" role="img" aria-label="Histogram of simulated multiples"></svg>
+        <div class="legend"><span><span class="sw" style="background:#111"></span>Survives to exit</span><span><span class="sw" style="background:#c9c9c9"></span>Fails (recovery only)</span><span><span class="sw" style="background:#7a1f2b"></span>Average</span></div>
+      </figure>
+
+      <figure>
+        <h2>What the deal is worth at each price</h2>
+        <figcaption>NPV of the cheque at the fair return. Where the line crosses zero is the maximum price.</figcaption>
+        <svg id="npv" viewBox="0 0 760 280" width="100%" role="img" aria-label="NPV against entry price"></svg>
+      </figure>
+
+      <figure>
+        <h2>The answer depends on your rule</h2>
+        <figcaption>Maximum post-money under different ways of deciding a deal is good enough.</figcaption>
+        <table>
+          <thead><tr><th>Rule</th><th class="num">Maximum price</th><th class="num">vs price tested</th></tr></thead>
+          <tbody id="rules"></tbody>
+        </table>
+      </figure>
+    </section>
+  </main>
+
+  <footer>
+    <p>Model: exit revenue and the exit multiple are lognormal (set by their P10 and P90) and can move
+      together; failure is a weighted coin flip with a small recovery; each future round dilutes the stake.
+      Payouts are discounted over each future's own holding period at the fair return. The full derivation,
+      sources and three real-deal tests are in the <a href="methodology.html">methodology</a>.</p>
+    <p>Presets for Figma, Navan and Artly use the sourced inputs from the methodology (Section 7).
+      The page is a single self-contained file. Results match the R notebook to within simulation noise. Illustrative only, not investment advice.</p>
+  </footer>
+</div>
+
+<script id="engine">
+// engine.js: JavaScript port of R/vc_engine.R (stochastic VC Method).
+// Same model, same distributions, same pricing rules. Money in USD millions.
+// Used by index.html in the browser and by test_engine.js under Node for checks against R.
+
+(function (root) {
+  "use strict";
+
+  // ---- Random numbers -------------------------------------------------------
+  // Seeded generator (mulberry32) so results are repeatable for a given input set.
+  function rng(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function normal(u) { // Box–Muller, one draw per call
+    let u1 = u(); while (u1 <= 1e-12) u1 = u();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u());
+  }
+  function gamma(u, k) { // Marsaglia–Tsang
+    if (k < 1) return gamma(u, k + 1) * Math.pow(u(), 1 / k);
+    const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
+    for (;;) {
+      let x, v;
+      do { x = normal(u); v = 1 + c * x; } while (v <= 0);
+      v = v * v * v;
+      const w = u();
+      if (w < 1 - 0.0331 * x * x * x * x) return d * v;
+      if (Math.log(w) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+    }
+  }
+  function beta(u, a, b) { const x = gamma(u, a), y = gamma(u, b); return x / (x + y); }
+
+  // ---- Distribution helpers (same as the R engine) --------------------------
+  const Z90 = 1.2815515655446004;
+  function lnormFromRange(p10, p90) {
+    return { mu: (Math.log(p10) + Math.log(p90)) / 2,
+             sd: (Math.log(p90) - Math.log(p10)) / (2 * Z90) };
+  }
+  function betaFromMean(m, k) { return { a: m * k, b: (1 - m) * k }; }
+  function discrete(u01, values, probs) {
+    const tot = probs.reduce((s, p) => s + p, 0);
+    let c = 0;
+    for (let i = 0; i < values.length; i++) { c += probs[i] / tot; if (u01 < c) return values[i]; }
+    return values[values.length - 1];
+  }
+  // Discrete "peaked" weights over a whole-number range, highest in the middle.
+  function triangularWeights(lo, hi) {
+    const vals = [], w = [], mid = (lo + hi) / 2;
+    for (let v = lo; v <= hi; v++) { vals.push(v); w.push(1 + (hi - lo) / 2 - Math.abs(v - mid)); }
+    return { vals, w };
+  }
+
+  // ---- Simulation ------------------------------------------------------------
+  // A: { pFail, recoveryMean, revP10, revP90, multP10, multP90, yearsMin, yearsMax,
+  //      roundsMin, roundsMax, dilutionMean, rho, n, seed }
+  function simulate(A) {
+    const n = A.n || 100000, u = rng(A.seed || 42);
+    const rev = lnormFromRange(A.revP10, A.revP90), mult = lnormFromRange(A.multP10, A.multP90);
+    const dil = betaFromMean(A.dilutionMean, 20), rec = betaFromMean(A.recoveryMean, 10);
+    // Explicit value/probability lists (as in the R presets) take priority over a min–max range
+    const yrs = A.yearsVals ? { vals: A.yearsVals, w: A.yearsProbs } : triangularWeights(A.yearsMin, A.yearsMax);
+    const rnd = A.roundsVals ? { vals: A.roundsVals, w: A.roundsProbs } : triangularWeights(A.roundsMin, A.roundsMax);
+    const rho = A.rho, s = Math.sqrt(1 - rho * rho);
+    const failed = new Uint8Array(n), years = new Float64Array(n), recovery = new Float64Array(n);
+    const exitValue = new Float64Array(n), retention = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const z1 = normal(u), z2 = rho * z1 + s * normal(u);
+      exitValue[i] = Math.exp(rev.mu + rev.sd * z1) * Math.exp(mult.mu + mult.sd * z2);
+      const f = u() < A.pFail;
+      failed[i] = f ? 1 : 0;
+      recovery[i] = beta(u, rec.a, rec.b);
+      years[i] = f ? 2 + Math.floor(u() * 4) : discrete(u(), yrs.vals, yrs.w);
+      const k = discrete(u(), rnd.vals, rnd.w);
+      let r = 1;
+      for (let j = 0; j < k; j++) r *= 1 - beta(u, dil.a, dil.b);
+      retention[i] = r;
+    }
+    return { n, failed, years, recovery, exitValue, retention };
+  }
+
+  // ---- Pricing ---------------------------------------------------------------
+  function evaluate(S, investment, post) {
+    const own = investment / post, n = S.n;
+    const moic = new Float64Array(n), irr = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const pay = S.failed[i] ? S.recovery[i] * investment : own * S.retention[i] * S.exitValue[i];
+      moic[i] = pay / investment;
+      irr[i] = Math.pow(moic[i], 1 / S.years[i]) - 1;
+    }
+    return { moic, irr };
+  }
+  function quantile(arr, p) {
+    const a = Float64Array.from(arr).sort();
+    return a[Math.min(a.length - 1, Math.max(0, Math.ceil(p * a.length) - 1))];
+  }
+  function summarise(E) {
+    const m = E.moic, n = m.length;
+    let sum = 0, loss = 0, p3 = 0, p10 = 0;
+    for (let i = 0; i < n; i++) { sum += m[i]; if (m[i] < 1) loss++; if (m[i] >= 3) p3++; if (m[i] >= 10) p10++; }
+    return { meanMoic: sum / n, medianMoic: quantile(m, 0.5), pLoss: loss / n, p3: p3 / n,
+             p10: p10 / n, medianIrr: quantile(E.irr, 0.5) };
+  }
+  // Maximum post-money under each rule (solved exactly, as checked in the R notebook, 6.1)
+  function maxPrices(S, fairRate) {
+    const n = S.n;
+    let A = 0, B = 0, Am = 0, Bm = 0;
+    const x = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const d = Math.pow(1 + fairRate, -S.years[i]);
+      if (S.failed[i]) { B += S.recovery[i] * d; Bm += S.recovery[i]; x[i] = 0; }
+      else { const v = S.retention[i] * S.exitValue[i]; A += v * d; Am += v; x[i] = v; }
+    }
+    A /= n; B /= n; Am /= n; Bm /= n;
+    const probRule = (target, prob) => { const q = quantile(x, 1 - prob) / target; return q > 0 ? q : NaN; };
+    return {
+      npv: A / (1 - B),                      // NPV ≥ 0 at the fair rate
+      mean3: Am / (3 - Bm),                  // expected multiple ≥ 3×
+      p3: probRule(3, 0.25),                 // P(MOIC ≥ 3×) ≥ 25%
+      p10: probRule(10, 0.10),               // P(MOIC ≥ 10×) ≥ 10%
+      npvAt: (post, inv) => inv * (A / post + B) - inv   // NPV of the cheque at a given price
+    };
+  }
+  // Classic VC Method with point inputs (medians), for comparison
+  function classicPrice(A, targetMultiple, meanRetention) {
+    const medRev = Math.sqrt(A.revP10 * A.revP90), medMult = Math.sqrt(A.multP10 * A.multP90);
+    return medRev * medMult * meanRetention / targetMultiple;
+  }
+
+  const api = { rng, simulate, evaluate, summarise, maxPrices, classicPrice, quantile, lnormFromRange };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  else root.VCEngine = api;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+(function () {
+  "use strict";
+  // Set this to your repository URL, e.g. "https://github.com/your-name/stochastic-vc-method"
+  const REPO_URL = "";
+  if (REPO_URL) { const a = document.getElementById("repo-link"); a.href = REPO_URL; a.hidden = false; }
+
+  const PRESETS = {
+    base:  { note: "The illustrative deal from the methodology (Sections 2–6), with ρ = 0.5.",
+             investment: 5, post: 30, pFail: 55, recovery: 10, revP10: 4, revP90: 120, multP10: 3, multP90: 12,
+             rho: 0.5, yearsMin: 5, yearsMax: 10, roundsMin: 2, roundsMax: 4, dilution: 18, fair: 20 },
+    figma: { note: "$13.9M at $77.0M post-money (Forge Global). Pre-revenue. Returned 165× at the 2025 IPO.",
+             investment: 13.91, post: 76.95, pFail: 50, recovery: 5, revP10: 5, revP90: 200, multP10: 2.5, multP90: 10,
+             rho: 0.5, yearsMin: 6, yearsMax: 11, roundsMin: 2, roundsMax: 5, dilution: 15, fair: 20 },
+    navan: { note: "$10.2M at $46.3M post-money (Forge Global). Returned 50× at the 2025 IPO.",
+             investment: 10.19, post: 46.34, pFail: 50, recovery: 5, revP10: 5, revP90: 200, multP10: 2.5, multP90: 10,
+             rho: 0.5, yearsMin: 6, yearsMax: 11, roundsMin: 2, roundsMax: 5, dilution: 15, fair: 20 },
+    artly: { note: "StartEngine round at $154.7M pre-money; revenue $2.2M (KingsCrowd summary of the Form C, Jun 2026).",
+             investment: 4.589, post: 159.28, pFail: 55, recovery: 5, revP10: 3, revP90: 60, multP10: 1.5, multP90: 6,
+             rho: 0.5, yearsMin: 5, yearsMax: 9, roundsMin: 1, roundsMax: 3, dilution: 15, fair: 20 }
+  };
+  const FIELDS = ["investment","post","pFail","recovery","revP10","revP90","multP10","multP90","rho",
+                  "yearsMin","yearsMax","roundsMin","roundsMax","dilution","fair"];
+  const $ = id => document.getElementById(id);
+
+  // ---- formatting ----
+  const fmtM = x => !isFinite(x) ? "n/a" : x >= 1000 ? "$" + (x / 1000).toFixed(x >= 10000 ? 0 : 1) + "B"
+                    : "$" + (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)) + "M";
+  const fmtP = (x, d = 0) => (100 * x).toFixed(d) + "%";
+  const fmtX = x => (x >= 10 ? x.toFixed(1) : x.toFixed(2)) + "×";
+
+  function loadPreset(key) {
+    const p = PRESETS[key];
+    FIELDS.forEach(f => { $(f).value = p[f]; });
+    $("preset-note").textContent = p.note;
+    schedule();
+  }
+
+  function readInputs() {
+    const v = {}; FIELDS.forEach(f => { v[f] = parseFloat($(f).value); });
+    const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+    const labels = { investment: "Cheque", post: "Post-money valuation", pFail: "Chance of failure",
+      recovery: "Recovery if it fails", revP10: "Exit-year revenue (P10)", revP90: "Exit-year revenue (P90)",
+      multP10: "Exit multiple (P10)", multP90: "Exit multiple (P90)", rho: "Revenue ↔ multiple link",
+      yearsMin: "Years to exit (from)", yearsMax: "Years to exit (to)", roundsMin: "Future funding rounds (from)",
+      roundsMax: "Future funding rounds (to)", dilution: "Dilution per round", fair: "Fair annual return" };
+    const blank = FIELDS.find(f => !isFinite(v[f]));
+    if (blank) return { error: `“${labels[blank]}” is empty or not a number.` };
+    if (!(v.investment > 0)) return { error: "The cheque must be above zero." };
+    if (!(v.post > v.investment)) return { error: "The post-money valuation must be larger than the cheque." };
+    if (!(v.revP10 > 0) || !(v.revP90 > v.revP10)) return { error: "Exit-year revenue: the P90 (good case) must be above the P10 (bad case), and both above zero." };
+    if (!(v.multP10 > 0) || !(v.multP90 > v.multP10)) return { error: "Exit multiple: the P90 must be above the P10, and both above zero." };
+    return {
+      investment: v.investment, post: v.post,
+      A: { pFail: clamp(v.pFail, 0, 99) / 100, recoveryMean: clamp(v.recovery, 0.5, 90) / 100,
+           revP10: v.revP10, revP90: v.revP90, multP10: v.multP10, multP90: v.multP90,
+           rho: clamp(v.rho, -0.9, 0.9),
+           yearsMin: Math.round(clamp(Math.min(v.yearsMin, v.yearsMax), 1, 30)),
+           yearsMax: Math.round(clamp(Math.max(v.yearsMin, v.yearsMax), 1, 30)),
+           roundsMin: Math.round(clamp(Math.min(v.roundsMin, v.roundsMax), 0, 10)),
+           roundsMax: Math.round(clamp(Math.max(v.roundsMin, v.roundsMax), 0, 10)),
+           dilutionMean: clamp(v.dilution, 0.5, 60) / 100, fair: clamp(v.fair, 1, 60) / 100,
+           n: 100000, seed: 42 }
+    };
+  }
+
+  let timer = null;
+  function schedule() {
+    $("results").classList.add("busy");
+    clearTimeout(timer); timer = setTimeout(run, 180);
+  }
+
+  function run() {
+    try { runModel(); }
+    catch (err) { $("results").classList.remove("busy"); $("verdict").textContent = "Something went wrong running the model.";
+                  $("verdict-sub").textContent = String(err && err.message || err); }
+  }
+  function runModel() {
+    const inp = readInputs();
+    $("results").classList.remove("busy");
+    if (inp.error) { $("verdict").textContent = "Check the inputs."; $("verdict-sub").textContent = inp.error; return; }
+    const { A, investment, post } = inp;
+    const S = VCEngine.simulate(A), E = VCEngine.evaluate(S, investment, post);
+    const s = VCEngine.summarise(E), m = VCEngine.maxPrices(S, A.fair);
+
+    // verdict
+    const gap = post / m.npv - 1;
+    let verdict;
+    if (Math.abs(gap) < 0.1) verdict = `At ${fmtM(post)}, the deal is <em>about fairly priced</em>.`;
+    else if (gap >= 1) verdict = `At ${fmtM(post)}, the price is <em>about ${(post / m.npv).toFixed(post / m.npv >= 10 ? 0 : 1)} times</em> what the model can justify.`;
+    else if (gap > 0) verdict = `At ${fmtM(post)}, the price is <em>${fmtP(gap)} above</em> what the model can justify.`;
+    else verdict = `At ${fmtM(post)}, the price is <em>${fmtP(-gap)} below</em> the model's maximum.`;
+    $("verdict").innerHTML = verdict;
+    $("verdict-sub").textContent = `The most you could pay and still earn ${fmtP(A.fair)} a year, with failure risk counted in the outcomes, is ${fmtM(m.npv)} post-money.`;
+
+    $("t-max").textContent = fmtM(m.npv);
+    $("t-post").textContent = fmtM(post);
+    $("t-gap").textContent = gap >= 1 ? (post / m.npv).toFixed(1) + " times the maximum" : (gap >= 0 ? fmtP(gap) + " above" : fmtP(-gap) + " below") + " the maximum";
+    $("t-mean").textContent = fmtX(s.meanMoic);
+    $("t-median").textContent = fmtX(s.medianMoic);
+    $("t-loss").textContent = fmtP(s.pLoss);
+    $("t-10x").textContent = fmtP(s.p10, s.p10 < 0.01 ? 1 : 0);
+
+    // rules table
+    const rows = [
+      ["NPV ≥ 0 at a " + fmtP(A.fair) + " fair return", m.npv, true],
+      ["Average multiple of at least 3×", m.mean3],
+      ["At least a 25% chance of 3×", m.p3],
+      ["At least a 10% chance of 10×", m.p10]
+    ];
+    $("rules").innerHTML = rows.map(([r, p, here]) =>
+      `<tr${here ? ' class="here"' : ""}><td>${r}</td><td class="num">${isFinite(p) ? fmtM(p) : "Not achievable"}</td>` +
+      `<td class="num">${isFinite(p) ? (post >= 2 * p ? (post / p).toFixed(1) + "× over" : post > p ? fmtP(post / p - 1) + " over" : fmtP(1 - post / p) + " under") : "–"}</td></tr>`).join("");
+
+    drawHist(S, E, s);
+    drawNpv(m, investment, post);
+  }
+
+  // ---- charts (plain SVG) ----
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    parent.appendChild(e); return e;
+  }
+
+  function drawHist(S, E, s) {
+    const svg = $("hist"); svg.innerHTML = "";
+    const W = 760, H = 300, L = 48, R = 12, T = 14, B = 34;
+    const lo = -2, hi = 2.7, nb = 72, bw = (hi - lo) / nb;
+    const surv = new Array(nb).fill(0), fail = new Array(nb).fill(0);
+    for (let i = 0; i < S.n; i++) {
+      const b = Math.min(nb - 1, Math.max(0, Math.floor((Math.log10(Math.max(E.moic[i], 1e-3)) - lo) / bw)));
+      if (S.failed[i]) fail[b]++; else surv[b]++;
+    }
+    const ymax = Math.max(...surv.map((v, i) => v + fail[i])) * 1.08;
+    const x = v => L + (v - lo) / (hi - lo) * (W - L - R);
+    const y = v => H - B - v / ymax * (H - T - B);
+    // grid + y labels
+    const step = Math.pow(10, Math.floor(Math.log10(ymax / 3)));
+    const yt = [1, 2, 5].map(m => m * step).find(t => ymax / t <= 6) || step * 10;
+    for (let v = 0; v <= ymax; v += yt) {
+      el("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: v === 0 ? "#111" : "#ececec" }, svg);
+      el("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end" }, svg, v.toLocaleString());
+    }
+    // bars
+    for (let b = 0; b < nb; b++) {
+      const x0 = x(lo + b * bw) + 0.5, w = Math.max(0.5, x(lo + (b + 1) * bw) - x(lo + b * bw) - 1);
+      if (fail[b]) el("rect", { x: x0, y: y(fail[b]), width: w, height: y(0) - y(fail[b]), fill: "#c9c9c9" }, svg);
+      if (surv[b]) el("rect", { x: x0, y: y(fail[b] + surv[b]), width: w, height: y(fail[b]) - y(fail[b] + surv[b]), fill: "#111" }, svg);
+    }
+    // x ticks
+    [[0.01, "0.01×"], [0.1, "0.1×"], [1, "1×"], [10, "10×"], [100, "100×"]].forEach(([v, t]) => {
+      el("line", { x1: x(Math.log10(v)), x2: x(Math.log10(v)), y1: H - B, y2: H - B + 4, stroke: "#111" }, svg);
+      el("text", { x: x(Math.log10(v)), y: H - B + 18, "text-anchor": "middle" }, svg, t);
+    });
+    // 1× and mean lines
+    el("line", { x1: x(0), x2: x(0), y1: T, y2: H - B, stroke: "#111", "stroke-dasharray": "3 3", "stroke-width": 1 }, svg);
+    el("text", { x: x(0) + 5, y: T + 10, class: "lbl" }, svg, "break-even");
+    const mx = x(Math.log10(Math.max(s.meanMoic, 0.011)));
+    el("line", { x1: mx, x2: mx, y1: T, y2: H - B, stroke: "#7a1f2b", "stroke-width": 2 }, svg);
+    el("text", { x: mx + 5, y: T + 26, class: "lbl", style: "fill:#7a1f2b" }, svg, "average " + fmtX(s.meanMoic));
+    el("text", { x: (L + W - R) / 2, y: H - 2, "text-anchor": "middle" }, svg, "Multiple of the cheque returned (log scale)");
+  }
+
+  function drawNpv(m, inv, post) {
+    const svg = $("npv"); svg.innerHTML = "";
+    const W = 760, H = 280, L = 58, R = 16, T = 16, B = 38;
+    const pmax = Math.max(post, isFinite(m.npv) ? m.npv : post) * 1.8, pmin = pmax * 0.04;
+    const pts = []; for (let i = 0; i <= 160; i++) { const p = pmin + (pmax - pmin) * i / 160; pts.push([p, m.npvAt(p, inv)]); }
+    const ys = pts.map(d => d[1]); let ylo = Math.min(...ys, 0), yhi = Math.max(...ys, 0);
+    const pad = (yhi - ylo) * 0.08; ylo -= pad; yhi += pad;
+    const x = p => L + (p - 0) / pmax * (W - L - R);
+    const y = v => T + (yhi - v) / (yhi - ylo) * (H - T - B);
+    // y grid
+    const span = yhi - ylo, st = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].find(s => span / s <= 6) || 1000;
+    for (let v = Math.ceil(ylo / st) * st; v <= yhi; v += st) {
+      el("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: Math.abs(v) < 1e-9 ? "#111" : "#ececec" }, svg);
+      el("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end" }, svg, (v < 0 ? "−$" : "$") + Math.abs(v).toFixed(st < 1 ? 1 : 0) + "M");
+    }
+    // x ticks
+    const xs = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].find(s => pmax / s <= 7) || 5000;
+    for (let p = 0; p <= pmax; p += xs) {
+      el("line", { x1: x(p), x2: x(p), y1: H - B, y2: H - B + 4, stroke: "#111" }, svg);
+      el("text", { x: x(p), y: H - B + 18, "text-anchor": "middle" }, svg, fmtM(p).replace(".00", ""));
+    }
+    el("polyline", { points: pts.map(([p, v]) => x(p) + "," + y(v)).join(" "), fill: "none", stroke: "#111", "stroke-width": 2 }, svg);
+    // price tested
+    el("line", { x1: x(post), x2: x(post), y1: T, y2: H - B, stroke: "#7a1f2b", "stroke-dasharray": "4 3" }, svg);
+    el("text", { x: x(post) + 5, y: T + 12, class: "lbl", style: "fill:#7a1f2b" }, svg, "price tested " + fmtM(post));
+    // max price
+    if (isFinite(m.npv) && m.npv <= pmax) {
+      el("circle", { cx: x(m.npv), cy: y(0), r: 5, fill: "#fff", stroke: "#111", "stroke-width": 2 }, svg);
+      el("text", { x: x(m.npv) + 8, y: y(0) - 8, class: "lbl" }, svg, "maximum " + fmtM(m.npv));
+    }
+    el("text", { x: (L + W - R) / 2, y: H - 2, "text-anchor": "middle" }, svg, "Entry post-money valuation");
+  }
+
+  FIELDS.forEach(f => $(f).addEventListener("input", () => { $("preset-note").textContent = "Custom inputs."; schedule(); }));
+  $("preset").addEventListener("change", e => loadPreset(e.target.value));
+  loadPreset("base");
+})();
+</script>
+</body>
+</html>
